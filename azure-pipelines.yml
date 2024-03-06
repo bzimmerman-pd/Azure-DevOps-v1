@@ -1,0 +1,44 @@
+trigger:
+- none  # Manual trigger for demonstration
+
+pool:
+  vmImage: ubuntu-latest  # Or your preferred agent
+
+variables:
+  acrName: '<your_acr_name>'  # Replace with your ACR name
+  acrLoginServer: $(acrName).azurecr.io  # ACR login server
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build_and_Push_Image
+    steps:
+    - script: |
+        docker login $acrLoginServer -u $(ACR_USERNAME) -p $(ACR_PASSWORD)  # Replace with ACR credentials
+        docker build -t $acrLoginServer/my-app:latest .
+        docker push $acrLoginServer/my-app:latest
+    - publish: $(Build.ArtifactStagingDirectory)
+
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - deployment: Deploy_to_AKS
+    environment: '<your_aks_environment_name>'  # Replace with your AKS environment name
+    strategy:
+      runOnce:
+        deploy:
+          kind: deployment
+          name: my-app-deployment
+          location: '<your_aks_region>'  # Replace with your AKS region
+          properties:
+            replicas: 2  # Same as in deployment.yaml
+            selector:
+              matchLabels:
+                app: my-app
+            template:
+              spec:
+                containers:
+                - name: my-app
+                  image: $(acrLoginServer)/my-app:latest
+                  port:
+                  - containerPort: 5000
